@@ -3,3 +3,5 @@ description = Extends <a href="http://drupal.org/project/nodeaccess_userreferenc
 package = CCK
 core = 6.x
 dependencies[] = nodeaccess_userreference
+dependencies[] = nodeaccess_autoreference
+dependencies[] = nodereference
