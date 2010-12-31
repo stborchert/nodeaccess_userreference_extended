@@ -1,0 +1,9 @@
+<?php
+// $Id$
+
+/**
+ * Implementation of hook_uninstall().
+ */
+function nodeaccess_userreference_extended_uninstall() {
+  variable_del('nodeaccess_userreference_extended');
+}

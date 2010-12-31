@@ -1,0 +1,247 @@
+<?php
+// $Id$
+
+/**
+ * @file
+ * Extend Node Access User Reference.
+ */
+
+/**
+ * Implementation of hook_nodeapi().
+ */
+function nodeaccess_userreference_extended_nodeapi(&$node, $op) {
+  $grants = array();
+  $priority = variable_get('nodeaccess-priority', 0);
+  switch ($op) {
+    case 'insert':
+      // Get all types referencing a content type handled by
+      // nodeaccess_userreference.
+      $types = _nodeaccess_userreference_extended_get_reference_types();
+      if (in_array($node->type, array_keys($types))) {
+        // Content type access rules needs to be extended.
+        // Get the referenced node.
+        if (($ref_node = node_load($node->{$types[$node->type]}[0]['nid'])) !== FALSE) {
+          // Find userreference field and users with permissions.
+          $nodeaccess_userreference = variable_get('nodeaccess_userreference', array());
+          if (!isset($nodeaccess_userreference[$ref_node->type])) {
+            break;
+          }
+          $fields = array_keys($nodeaccess_userreference[$ref_node->type]);
+          $users = $ref_node->{$fields[0]};
+          $data = nodeaccess_userreference_extended_field_settings($ref_node->type, $fields[0]);
+          foreach ($users as $value) {
+            $grants[] = array(
+              'gid' => $value['uid'],
+              'realm' => 'nodeaccess_userreference_extended',
+              'grant_view' => 1, // view access is always granted.
+              'grant_update' => $data['update'],
+              'grant_delete' => $data['delete'],
+              'priority' => $priority
+            );
+          }
+          if (count($grants)) {
+            node_access_write_grants($node, $grants, 'nodeaccess_userreference_extended');
+          }
+        }
+      }
+      break;
+    case 'update':
+      // Get all content types handled by nodeaccess_userreference.
+      $types = variable_get('nodeaccess_userreference', array());
+      if (in_array($node->type, array_keys($types))) {
+        $fields = array_keys($types[$node->type]);
+        $users = $node->{$fields[0]};
+        $data = nodeaccess_userreference_extended_field_settings($node->type, $fields[0]);
+        foreach ($users as $value) {
+          $grants[] = array(
+            'gid' => $value['uid'],
+            'realm' => 'nodeaccess_userreference_extended',
+            'grant_view' => 1, // view access is always granted.
+            'grant_update' => $data['update'],
+            'grant_delete' => $data['delete'],
+            'priority' => $priority
+          );
+        }
+        if (count($grants)) {
+          // Update grants for all content types referencing this node.
+          $reference_types = _nodeaccess_userreference_extended_get_reference_types($node->type);
+          foreach ($reference_types as $type_name => $field_name) {
+            $results = db_query("SELECT nid FROM {content_type_%s} WHERE %s_nid = %d", $type_name, $field_name, $node->nid);
+            while (($row = db_fetch_object($results)) !== FALSE) {
+              if (($referenced_node = node_load($row->nid)) !== FALSE) {
+                node_access_write_grants($referenced_node, $grants, 'nodeaccess_userreference_extended');
+              }
+            }
+          }
+        }
+      }
+      break;
+  }
+}
+
+/**
+ * Implementation of hook_node_access_records().
+ */
+function nodeaccess_userreference_extended_node_access_records($node) {
+  if (nodeaccess_disabling()) {
+    return;
+  }
+  $users = array();
+  $grants = array();
+  $priority = variable_get('nodeaccess-priority', 0);
+  // Get all types referencing a content type handled by
+  // nodeaccess_userreference.
+  $types = _nodeaccess_userreference_extended_get_reference_types();
+  if (in_array($node->type, array_keys($types))) {
+    // Content type access rules needs to be extended.
+    // Get the referenced node.
+    if (($ref_node = node_load($node->{$types[$node->type]}[0]['nid'])) !== FALSE) {
+      // Find userreference field and users with permissions.
+      $nodeaccess_userreference = variable_get('nodeaccess_userreference', array());
+      if (!isset($nodeaccess_userreference[$ref_node->type])) {
+        break;
+      }
+      $fields = array_keys($nodeaccess_userreference[$ref_node->type]);
+      $users = $ref_node->{$fields[0]};
+      $data = nodeaccess_userreference_extended_field_settings($ref_node->type, $fields[0]);
+      foreach ($users as $value) {
+        $grants[] = array(
+          'gid' => $value['uid'],
+          'realm' => 'nodeaccess_userreference_extended',
+          'grant_view' => 1, // view access is always granted.
+          'grant_update' => $data['update'],
+          'grant_delete' => $data['delete'],
+          'priority' => $priority
+        );
+      }
+    }
+  }
+  return $grants;
+}
+
+/**
+ * Implementation of hook_node_grants().
+ */
+function nodeaccess_userreference_extended_node_grants($account, $op) {
+	 return array('nodeaccess_userreference_extended' => array($account->uid));
+}
+
+/**
+ * Implementation of hook_form-FORM-ID_alter().
+ */
+function nodeaccess_userreference_extended_form_content_field_edit_form_alter(&$form, $form_state) {
+  if ($form['#field']['type'] == "userreference") {
+
+    $data = nodeaccess_userreference_extended_field_settings($form['#field']['type_name'], $form['#field']['field_name']);
+    $referencing_types = _nodeaccess_userreference_extended_get_reference_types($form['#field']['type_name']);
+
+    // Fieldset for extended settings.
+    $form['widget']['nodeaccess_userreference_extended'] = array(
+      '#type' => 'fieldset',
+      '#title' => t('Referencing nodes'),
+      '#collapsible' => TRUE,
+      '#weight' => $form['widget']['nodeaccess_userreference_delete']['#weight'] + 1,
+      '#description' => count($referencing_types) ? NULL : t('No other content type has a reference to this type at the moment. To make the settings below work, you will have to add a nodereference field to another content type and select this type as a content type that can be referenced.'),
+    );
+    $form['widget']['nodeaccess_userreference_extended']['nodeaccess_userreference_extended_update'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Grant "edit" node access for referencing nodes'),
+      '#default_value' => $data['update'],
+      '#description' => t('Give the referenced user access to edit nodes referencing this type, if they cannot already do so. If the users role is not permitted to edit any nodes of the referenced type, this will have no effect.'),
+    );
+    $form['widget']['nodeaccess_userreference_extended']['nodeaccess_userreference_extended_delete'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Grant "delete" node access for referencing nodes'),
+      '#default_value' => $data['delete'],
+      '#description' => t('Give the referenced user access to delete nodes referencing this type, if they cannot already do so. If the users role is not permitted to delete any nodes of the referenced type, this will have no effect.'),
+    );
+
+    $form['#submit'][] = 'nodeaccess_userreference_extended_content_field_edit_form_submit';
+  }
+}
+
+/**
+ * Extra submit function for User Reference field config.
+ */
+function nodeaccess_userreference_extended_content_field_edit_form_submit($form, &$form_state) {
+  $form_values = &$form_state['values'];
+  $data = array(
+    'view' => 1, // view access is always granted.
+    'update' => $form_values['nodeaccess_userreference_extended_update'],
+    'delete' => $form_values['nodeaccess_userreference_extended_delete'],
+  );
+  nodeaccess_userreference_extended_field_settings($form_values['type_name'], $form_values['field_name'], $data);
+  $nodes = db_result(db_query("SELECT COUNT(*) FROM {node} WHERE type = '%s'", $form_values['type_name']));
+  if ($nodes) {
+    node_access_needs_rebuild(TRUE);
+  }
+}
+
+/**
+ * Set and get nodeaccess userreference extended field settings.
+ *
+ * @param $type_name
+ *   The node type.
+ * @param $field_name
+ *   The name of the field.
+ * @param $variable
+ *   If set will update the value of the settings for this field.
+ * @return
+ *   The stored or updated value of the settings for this field.
+ */
+function nodeaccess_userreference_extended_field_settings($type_name, $field_name, $variable = NULL) {
+  // Load saved data.
+  $data = variable_get('nodeaccess_userreference_extended', NULL);
+  if (!$data || !isset($data[$type_name][$field_name])) {
+    // Attempt to get result from old variables.
+    $old_varname = substr('nodeaccess_userreference_extended_'. $field_name .'_'. $type_name, 0, 48);
+    $old_data = variable_get($old_varname, NULL);
+    if (is_array($old_data)) {
+      variable_del($old_varname);
+      nodeaccess_userreference_field_settings($type_name, $field_name, $old_data);
+      $data[$type_name][$field_name] = $old_data;
+    }
+    else {
+      // default
+      $data[$type_name][$field_name] = array(
+        'view' => 1, // view access is always granted.
+        'update' => 0, 
+        'delete' => 0,
+      );
+    }
+  }
+
+  // change and 'set' the variable
+  if (isset($variable)) {
+    $data[$type_name][$field_name] = $variable;
+    variable_set('nodeaccess_userreference_extended', $data);
+  }
+
+  return $data[$type_name][$field_name];
+}
+
+/**
+ * Helper function to get a list of all node types referencing the given type.
+ * @param $type_name
+ *   Name of node type that is referenced by other types. If not set all types
+ *   that reference a content type wit a userreference field are returned.
+ */
+function _nodeaccess_userreference_extended_get_reference_types($type_name = NULL) {
+  $type_info = _content_type_info();
+  $types = array();
+  $names = array_keys(variable_get('nodeaccess_userreference', array()));
+  if (!empty($type_name)) {
+    $names = is_array($type_name) ? $type_name : array($type_name);
+  }
+  foreach ($type_info['fields'] as $field_name => $field) {
+    if ($field['type'] != 'nodereference') {
+      continue;
+    }
+    foreach ($names as $name) {
+      if (in_array($name, $field['referenceable_types'], TRUE)) {
+        $types[$field['type_name']] = $field_name;
+      }
+    }
+  }
+  return $types;
+}
