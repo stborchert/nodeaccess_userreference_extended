@@ -2,6 +2,9 @@ name = "Node Access User Reference Extended"
 description = Extends <a href="http://drupal.org/project/nodeaccess_userreference">Node Access User Reference</a>.
 package = CCK
 core = 6.x
+dependencies[] = nodeaccess
 dependencies[] = nodeaccess_userreference
 dependencies[] = nodeaccess_autoreference
 dependencies[] = nodereference
+
+version = 6.x-1.1

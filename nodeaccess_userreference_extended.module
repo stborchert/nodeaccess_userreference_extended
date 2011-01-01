@@ -81,6 +81,7 @@ function nodeaccess_userreference_extended_nodeapi(&$node, $op) {
               }
             }
           }
+          node_access_needs_rebuild(TRUE);
         }
       }
       break;
