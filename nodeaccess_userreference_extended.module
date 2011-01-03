@@ -34,12 +34,15 @@ function nodeaccess_userreference_extended_nodeapi(&$node, $op) {
             // User with permission to edit or delete any content of this type
             // defined by role permissions are allowed to edit other content
             // only.
+            $delete = $data['delete'] && $access['delete'];
+            $edit = ($data['update'] && $access['update']);
+            $view = $data['view'] || $edit || $delete;
             $grants[] = array(
               'gid' => $value['uid'],
               'realm' => 'nodeaccess_userreference_extended',
-              'grant_view' => 1, // view access is always granted.
-              'grant_update' => $data['update'] && $access['update'],
-              'grant_delete' => $data['delete'] && $access['delete'],
+              'grant_view' => $view,
+              'grant_update' => $edit,
+              'grant_delete' => $delete,
               'priority' => $priority
             );
           }
@@ -61,12 +64,15 @@ function nodeaccess_userreference_extended_nodeapi(&$node, $op) {
           // User with permission to edit or delete any content of this type
           // defined by role permissions are allowed to edit other content
           // only.
+          $delete = $data['delete'] && $access['delete'];
+          $edit = ($data['update'] && $access['update']);
+          $view = $data['view'] || $edit || $delete;
           $grants[] = array(
             'gid' => $value['uid'],
             'realm' => 'nodeaccess_userreference_extended',
-            'grant_view' => 1, // view access is always granted.
-            'grant_update' => $data['update'] && $access['update'],
-            'grant_delete' => $data['delete'] && $access['delete'],
+            'grant_view' => $view,
+            'grant_update' => $edit,
+            'grant_delete' => $delete,
             'priority' => $priority
           );
         }
@@ -111,6 +117,7 @@ function nodeaccess_userreference_extended_node_access_records($node) {
         break;
       }
       $fields = array_keys($nodeaccess_userreference[$ref_node->type]);
+      dsm($fields);
       $users = $ref_node->{$fields[0]};
       $data = nodeaccess_userreference_extended_field_settings($ref_node->type, $fields[0]);
       foreach ($users as $value) {
@@ -118,12 +125,15 @@ function nodeaccess_userreference_extended_node_access_records($node) {
         // User with permission to edit or delete any content of this type
         // defined by role permissions are allowed to edit other content
         // only.
+        $delete = $data['delete'] && $access['delete'];
+        $edit = ($data['update'] && $access['update']);
+        $view = $data['view'] || $edit || $delete;
         $grants[] = array(
           'gid' => $value['uid'],
           'realm' => 'nodeaccess_userreference_extended',
-          'grant_view' => 1, // view access is always granted.
-          'grant_update' => $data['update'] && $access['update'],
-          'grant_delete' => $data['delete'] && $access['delete'],
+          'grant_view' => $view,
+          'grant_update' => $edit,
+          'grant_delete' => $delete,
           'priority' => $priority
         );
       }
@@ -177,17 +187,23 @@ function nodeaccess_userreference_extended_form_content_field_edit_form_alter(&$
       '#weight' => $form['widget']['nodeaccess_userreference_delete']['#weight'] + 1,
       '#description' => count($referencing_types) ? NULL : t('No other content type has a reference to this type at the moment. To make the settings below work, you will have to add a nodereference field to another content type and select this type as a content type that can be referenced.'),
     );
+    $form['widget']['nodeaccess_userreference_extended']['nodeaccess_userreference_extended_view'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Grant "view" node permission for referencing nodes'),
+      '#default_value' => $data['update'],
+      '#description' => t('Give the referenced user permission to view nodes referencing this type, if they cannot already do so.'),
+    );
     $form['widget']['nodeaccess_userreference_extended']['nodeaccess_userreference_extended_update'] = array(
       '#type' => 'checkbox',
-      '#title' => t('Grant "edit" node access for referencing nodes'),
+      '#title' => t('Grant "edit" node permission for referencing nodes'),
       '#default_value' => $data['update'],
-      '#description' => t('Give the referenced user access to edit nodes referencing this type, if they cannot already do so. If the users role is not permitted to edit any nodes of the referenced type, this will have no effect.'),
+      '#description' => t('Give the referenced user permission to edit nodes referencing this type, if they cannot already do so. If the users role is not permitted to edit any nodes of the referenced type, this will have no effect.'),
     );
     $form['widget']['nodeaccess_userreference_extended']['nodeaccess_userreference_extended_delete'] = array(
       '#type' => 'checkbox',
-      '#title' => t('Grant "delete" node access for referencing nodes'),
+      '#title' => t('Grant "delete" node permission for referencing nodes'),
       '#default_value' => $data['delete'],
-      '#description' => t('Give the referenced user access to delete nodes referencing this type, if they cannot already do so. If the users role is not permitted to delete any nodes of the referenced type, this will have no effect.'),
+      '#description' => t('Give the referenced user permission to delete nodes referencing this type, if they cannot already do so. If the users role is not permitted to delete any nodes of the referenced type, this will have no effect.'),
     );
 
     $form['#submit'][] = 'nodeaccess_userreference_extended_content_field_edit_form_submit';
@@ -229,7 +245,7 @@ function nodeaccess_userreference_extended_user_admin_perm_submit($form, &$form_
 function nodeaccess_userreference_extended_content_field_edit_form_submit($form, &$form_state) {
   $form_values = &$form_state['values'];
   $data = array(
-    'view' => 1, // view access is always granted.
+    'view' => $form_values['nodeaccess_userreference_extended_view'],
     'update' => $form_values['nodeaccess_userreference_extended_update'],
     'delete' => $form_values['nodeaccess_userreference_extended_delete'],
   );
