@@ -27,25 +27,7 @@ function nodeaccess_userreference_extended_nodeapi(&$node, $op) {
             break;
           }
           $fields = array_keys($nodeaccess_userreference[$ref_node->type]);
-          $users = $ref_node->{$fields[0]};
-          $data = nodeaccess_userreference_extended_field_settings($ref_node->type, $fields[0]);
-          foreach ($users as $value) {
-            $access = _nodeaccess_userreference_extended_user_permissions($value['uid'], $node->type);
-            // User with permission to edit or delete any content of this type
-            // defined by role permissions are allowed to edit other content
-            // only.
-            $delete = $data['delete'] && $access['delete'];
-            $edit = ($data['update'] && $access['update']);
-            $view = $data['view'] || $edit || $delete;
-            $grants[] = array(
-              'gid' => $value['uid'],
-              'realm' => 'nodeaccess_userreference_extended',
-              'grant_view' => $view,
-              'grant_update' => $edit,
-              'grant_delete' => $delete,
-              'priority' => $priority
-            );
-          }
+          $grants = _nodeaccess_userreference_extended_get_grants($ref_node, $node, $fields);
           if (count($grants)) {
             node_access_write_grants($node, $grants, 'nodeaccess_userreference_extended');
           }
@@ -57,25 +39,7 @@ function nodeaccess_userreference_extended_nodeapi(&$node, $op) {
       $types = variable_get('nodeaccess_userreference', array());
       if (in_array($node->type, array_keys($types))) {
         $fields = array_keys($types[$node->type]);
-        $users = $node->{$fields[0]};
-        $data = nodeaccess_userreference_extended_field_settings($node->type, $fields[0]);
-        foreach ($users as $value) {
-          $access = _nodeaccess_userreference_extended_user_permissions($value['uid'], $node->type);
-          // User with permission to edit or delete any content of this type
-          // defined by role permissions are allowed to edit other content
-          // only.
-          $delete = $data['delete'] && $access['delete'];
-          $edit = ($data['update'] && $access['update']);
-          $view = $data['view'] || $edit || $delete;
-          $grants[] = array(
-            'gid' => $value['uid'],
-            'realm' => 'nodeaccess_userreference_extended',
-            'grant_view' => $view,
-            'grant_update' => $edit,
-            'grant_delete' => $delete,
-            'priority' => $priority
-          );
-        }
+        $grants = _nodeaccess_userreference_extended_get_grants($node, $node, $fields);
         if (count($grants)) {
           // Update grants for all content types referencing this node.
           $reference_types = _nodeaccess_userreference_extended_get_reference_types($node->type);
@@ -117,26 +81,7 @@ function nodeaccess_userreference_extended_node_access_records($node) {
         break;
       }
       $fields = array_keys($nodeaccess_userreference[$ref_node->type]);
-      dsm($fields);
-      $users = $ref_node->{$fields[0]};
-      $data = nodeaccess_userreference_extended_field_settings($ref_node->type, $fields[0]);
-      foreach ($users as $value) {
-        $access = _nodeaccess_userreference_extended_user_permissions($value['uid'], $node->type);
-        // User with permission to edit or delete any content of this type
-        // defined by role permissions are allowed to edit other content
-        // only.
-        $delete = $data['delete'] && $access['delete'];
-        $edit = ($data['update'] && $access['update']);
-        $view = $data['view'] || $edit || $delete;
-        $grants[] = array(
-          'gid' => $value['uid'],
-          'realm' => 'nodeaccess_userreference_extended',
-          'grant_view' => $view,
-          'grant_update' => $edit,
-          'grant_delete' => $delete,
-          'priority' => $priority
-        );
-      }
+      $grants = _nodeaccess_userreference_extended_get_grants($ref_node, $node, $fields);
     }
   }
   return $grants;
@@ -344,4 +289,38 @@ function _nodeaccess_userreference_extended_user_permissions($uid, $type) {
   $access['update'] = user_access("edit referenced $type content", $account);
   $access['delete'] = user_access("delete referenced $type content", $account);
   return $access;
+}
+
+/**
+ * Get grants for a set of users.
+ *
+ * @param $node1
+ * @param $node2
+ * @param $fields
+ */
+function _nodeaccess_userreference_extended_get_grants($node1, $node2, $fields) {
+  $grants = array();
+  $priority = variable_get('nodeaccess-priority', 0);
+  foreach ($fields as $field) {
+    $data = nodeaccess_userreference_extended_field_settings($node1->type, $field);
+    $users = $node1->{$field};
+    foreach ($users as $account) {
+      if (!isset($account['uid'])) {
+        continue;
+      }
+      $access = _nodeaccess_userreference_extended_user_permissions($account['uid'], $node2->type);
+      $delete = $data['delete'] && $access['delete'];
+      $edit = ($data['update'] && $access['update']);
+      $view = $data['view'] || $edit || $delete;
+      $grants[] = array(
+        'gid' => $account['uid'],
+        'realm' => 'nodeaccess_userreference_extended',
+        'grant_view' => $view,
+        'grant_update' => $edit,
+        'grant_delete' => $delete,
+        'priority' => $priority
+      );
+    }
+  }
+  return $grants;
 }
